@@ -29,7 +29,8 @@
  * Version 0.14 Cleaned up the code
  *
  * New Fork: Adding 4 more loops*
- * Version  0.1 Initial version adding 4 loops more
+ * Version 0.1 Initial version adding 4 loops more
+ * Version 0.2 Some fixes. Removed MIDI functionality
  * 
  * Functions and subroutines
  * setup()
@@ -622,7 +623,8 @@ void readPreset(int addr, int pcNum, int led)
     switchLoops(intMemory);
   }
   unsigned long currentMillis = 0;
- 
+  lcd.setCursor(0,3);
+  lcd.print("                    ");
 
   // Amp switching is no longer supported
 //  intRelayVal = EEPROM.read((addr)+8); // Get Reverb value
@@ -781,7 +783,7 @@ void handlePresetKeyEvent(int channel)
     deviceMode=PRESETMODE;
     readPreset(getAddress(channel), channel+1, channel);
     lcd.setCursor(0,1);
-    lcd.print("    Preset mode ");
+    lcd.print("    Preset mode     ");
   }
   if (deviceMode==MIDIMODE) // Midi mode, in this mode only button/channel 6 and 7 are handled for up and down of the current midi device value
   {
@@ -915,14 +917,15 @@ void changeDeviceMode(int mode)
 // when mode is 2 we either go to store preset mode or we disable store preset mode
   if (debug) Serial.println("changeDeviceMode");
   if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=PROGRAMMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
+  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}  //modified to remove MIDI
   else if (mode==PROGRAMMODE && deviceMode==STOREMODE) {deviceMode=PROGRAMMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==MIDIMODE) {deviceMode=ORDERMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==ORDERMODE) {deviceMode=PRESETMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==MIDIMODE) {deviceMode=ORDERMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==ORDERMODE) {deviceMode=PRESETMODE;}
   else if (mode==STOREMODE && deviceMode==PRESETMODE) {deviceMode=STOREMODE;}
   else if (mode==STOREMODE && deviceMode==PROGRAMMODE) {deviceMode=STOREMODE;}
-  else if (mode==STOREMODE && deviceMode==MIDIMODE) {deviceMode=STOREMODE;}
-  else if (mode==STOREMODE && deviceMode==ORDERMODE) {deviceMode=STOREMODE;}
+  //else if (mode==STOREMODE && deviceMode==MIDIMODE) {deviceMode=STOREMODE;}
+  //else if (mode==STOREMODE && deviceMode==ORDERMODE) {deviceMode=STOREMODE;}
   else if (mode==STOREMODE && deviceMode==STOREMODE) {deviceMode=PRESETMODE;}
   if  (debug) Serial.println("New deviceMode");
   if  (debug) Serial.println(deviceMode);
@@ -930,7 +933,7 @@ void changeDeviceMode(int mode)
   if (deviceMode==PROGRAMMODE) // set looper mode
   {
     lcd.setCursor(0,1);
-    lcd.print("    Program mode");
+    lcd.print("    Program mode    ");
     setLCDChannel();
   }
   if (deviceMode==MIDIMODE) // set midi mode
@@ -1010,6 +1013,31 @@ void showLCDBankMode()
 void handleAmpBankEvent(int intButton)
 {
   // Handle amp setting or bank switch event, input either 1 (reverb or down) or 2 (gain or up)
+      if (deviceMode==BANKMODE ) // Bank  mode => bank up or down
+  {
+    String strBank = "A";
+    // check currentBank
+    lcd.setCursor(0,1);
+    int tempBank=newBank;
+    if (intButton==1) // UP
+    {
+      if (tempBank==0) { newBank = 100; strBank="B"; }
+      if (tempBank==100) { newBank = 200; strBank="C"; }
+      if (tempBank==200) { newBank = 0; strBank="A"; }
+    }
+    // check currentBank
+    if (intButton==2) // Down
+    {
+      if (tempBank==0) { newBank = 200; strBank="C";}
+      if (tempBank==100) { newBank = 0; strBank="A";}
+      if (tempBank==200) { newBank = 100; strBank="B";}
+    }
+    showLCDBankMode();
+    // Update LCD
+    lcd.setCursor(0,1);
+    String strText = "Select bank " + strBank + " preset";
+    lcd.print(strText);
+  }
   if (deviceMode==PRESETMODE) // Preset mode => bank up or down
   {
     String strBank = "A";
