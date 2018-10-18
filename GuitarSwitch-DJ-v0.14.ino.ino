@@ -27,7 +27,11 @@
  * Version 0.12 Added SwitchOrder to solve double audio boost issue with boost pedal and crunch channel activated during switch from crunch mode to clean mode
  * Version 0.13 Improved switch order mode
  * Version 0.14 Cleaned up the code
- * 
+ *
+ * New Fork: Adding 4 more loops*
+ * Version 0.1 Initial version adding 4 loops more
+ * Version 0.2 Some fixes. Removed MIDI functionality
+ * Version 0.3 Added Amp selection
  * 
  * Functions and subroutines
  * setup()
@@ -62,11 +66,13 @@
 #include <Keypad.h>
 
 // Set LCD defaults
-LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
+//LiquidCrystal_I2C lcd(0x3f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
+LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // When simulating in Proteus use this one
 
 // Set I2C IO addresses
 #define IO_ADDR_Presets 0x38
 #define IO_ADDR_Loops 0x39
+#define IO_ADDR_Loops2 0x3A
 
 const String strVersion="0.13";
 
@@ -100,6 +106,11 @@ char keys[rows][cols] = {
 // r - loop 6
 // s - loop 7
 // t - loop 8
+// u - loop 9
+// v - loop 10
+// w - loop 11
+// x - loop 12
+
 };
 
 int intPrevMem = 0; // Stores previous preset pickup, used to check boost pedal for determining the order of switching Midi first or pedals first
@@ -110,6 +121,7 @@ const int STOREMODE = 2;
 const int BANKMODE = 3;
 const int MIDIMODE = 4;
 const int ORDERMODE = 5; // determines the order in with the pedals and midi devices are switched
+const int AMPMODE = 6; //menu to select what amp is active in a preset
 
 // Var for storing mute mode, 0 for not active, 1 for active and 2 for tilt ;-) 
 int muteMode = 0;
@@ -119,28 +131,35 @@ const int MIDIAMP = 0; // Position of amp in midi arrays
 const int MIDIFB = 1;  // Position of Flashback in midi arrays
 const int MIDIBS = 2;  // Position of Bigsky in midi arrays
 const int MIDIMB = 3;  // Position og Mobius in midi arrays
-String strMidiDevices[4] = {"EVH Amp             ","Flashback           ","BigSky              ","Mobius              "}; // Name tage used when programming midi settings for the devices
-String strMidiDevicesShort[4] = {"EVH","FB","BS","MB"};  // Short names used in preset mode to display the presets midi device value
+const int AMPPOS = 4;  // Position of amp relay status (3 amps)
+String strMidiDevices[4] = {"              ","            ","              ","               "}; // Name tage used when programming midi settings for the devices
+String strMidiDevicesShort[4] = {" "," "," "," "};  // Short names used in preset mode to display the presets midi device value
+String strAmpName[3] = {"     Soldano        ","    Jazz Chorus     ","    Marshall 18     "}; // Name tage used when programming amp settings
 const int intMidiMaxValue[4] = {2,2,127,127};  // Maximum value per midi device
 const int intMidiDeviceChannels[4] = {2,0,1,3};  // Midi address (channel) for each device
+String strAmpValue[2] = {"OFF","ON"};
+
 int intMidiValues[4]= {0,0,0,0};  // Current midi values per device
 int intCurMidi = 0;
 int intCurMidiValue = 0;
+int intCurAmpValue = 0;
+int intCurAmp = 0;
+int intAmpValues[3]= {0,0,0}; 
 // Determines the order for switching midi or loops first
 int intCurSwitchOrderValue = 0; // 0 is loop then midi, 1 is midi then loop
 
 // Arduino I/O pins used for the button marix
 byte rowPins[rows] = {22,23}; // 22 preset+controls, 23 loop
-byte colPins[cols] = {2, 3, 4, 5, 6, 7, 8, 36, 10, 11, 12, 13};  //1,2,3,4,5,6,7,8,mode,mute,up/reveb,down/channel
+byte colPins[cols] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};  //1,2,3,4,5,6,7,8,mode,mute,up/reveb,down/channel  Pin 9 was 36 before.
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 // I/O ports used for the loop relays
-int relayPin[8] = {32,31,30,29,28,27,26,25};
-char* relayName[8] = {"NEO Lesley", "EQ", "Black Star", "RC Booster", "Corona", "Flashback", "FX 7" , "FX 8"}; // names of the loop pedals, no longer used in LCD
+int relayPin[12] = {32,31,30,29,28,27,26,25,35,36,37,38};
+int relayAmpPin[3] = {40,41,42};
+char* relayName[12] = {"NEO Lesley", "EQ", "Black Star", "RC Booster", "Corona", "Flashback", "FX 7" , "FX 8", "FX 9", "FX 10", "FX 11" , "FX12"}; // names of the loop pedals, no longer used in LCD
 // Names of the presets, presented in the LCD when activated
-char* presetTextA[8] = {"Clean DJ 1          ", "Clean DJ lead       ", "Crunch DJ Rhythm    ", "Crunch DJ lead      ", "Lead DJ delay       ", "Lead DJ dry         ", "                    " , "                    "};
-char* presetTextB[8] = {"Preset 1", "Preset 2", "Preset 3", "Preset 4", "Preset 5", "Preset 6", "Preset 7" , "Preset 8"};
-char* presetTextC[8] = {"Preset 1", "Preset 2", "Preset 3", "Preset 4", "Preset 5", "Preset 6", "Preset 7" , "Preset 8"};
-
+char* presetTextA[8] = {"      Bank A-1      ", "      Bank A-2      ", "      Bank A-3      ", "      Bank A-4      ", "      Bank A-5      ", "      Bank A-6      ", "      Bank A-7      " , "      Bank A-8      "};
+char* presetTextB[8] = {"      Bank B-1      ", "      Bank B-2      ", "      Bank B-3      ", "      Bank B-4      ", "      Bank B-5      ", "      Bank B-6      ", "      Bank B-7      " , "      Bank B-8      "};
+char* presetTextC[8] = {"      Bank C-1      ", "      Bank C-2      ", "      Bank C-3      ", "      Bank C-4      ", "      Bank C-5      ", "      Bank C-6      ", "      Bank C-7      " , "      Bank C-8      "};
 // Variables for storing temp values of LED's 
 int intPresetLEDs=0;
 int intLoopLEDs=0;
@@ -162,7 +181,7 @@ int ampReverbValue = HIGH;
 int ampGainValue = LOW;
 int i;
 
-int numberOfPedal = 8; /*adapt this number to your needs = number of loop pedals */
+int numberOfPedal = 12; /*adapt this number to your needs = number of loop pedals */
 int saveState = 0; // 0 - no save active, 1 - waiting for save, 2 - processed save
 int deviceMode = PRESETMODE; // 0 = preset mode, 1 = looper mode, 2 = store preset mode, 3 = change bank mode
 int holdProcessed=0; // used for detecting hold state of mode switch (for switching to store mode)
@@ -178,9 +197,9 @@ int newBank = 0; //Used for changing banks till setting is confirmed
 unsigned long previousMillis = 0; // timer is used for blinking led's when saving preset
 unsigned long previousReverbMillis = 0; // timer is used for disabling Reverb relay (the Bugera amp uses a mementary swicth to switch reverd)
 unsigned long previousGainMillis = 0; // timer is used for disabling Gain relay (the Bugera amp uses a mementary swicth to switch between channels)
-const long interval = 250; // interval at which the leds will blink
-int previousRelayState[8]={LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW}; 
-int previousButtonLEDState[8]={LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW};
+const long interval = 150; // interval at which the leds will blink
+int previousRelayState[12]={LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW}; 
+int previousButtonLEDState[12]={LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW};
 
 unsigned long startMillis = 0; // timer is used for calculating event length, used for perfomance testing 
 
@@ -215,7 +234,7 @@ void setup()
   lcd.setBacklightPin(3,POSITIVE); 
   lcd.setBacklight(HIGH);
   lcd.setCursor(0,0);
-  lcd.print("DJ's - Switch8  DJ-8");
+  lcd.print("  Nick's - GigRig");
   lcd.setCursor(0,1);
   lcd.print("Guitar pedal looper ");
 
@@ -231,9 +250,14 @@ void setup()
     pinMode(relayPin[i], OUTPUT);
     digitalWrite(relayPin[i],HIGH); //pullup all relay outputs in case off low level relayboard
   }
+    for(i=0; i<3; i++)
+  {
+    pinMode(relayAmpPin[i], OUTPUT);
+    digitalWrite(relayAmpPin[i],HIGH); //pullup all relay outputs in case off low level relayboard
+  }
   initLEDs();
   delay(30);
-  keypad.addEventListener(keypadEvent); //add an event listener for this keypad, meaning all the buttons on the Switch8
+  keypad.addEventListener(keypadEvent); //add an event listener for this keypad, meaning all the buttons on the Switch12
   keypad.setHoldTime(2000);
   readPreset(10, 1, 0); // Load default preset number 1 from bank a
   mute();
@@ -299,6 +323,9 @@ void initLEDs()
       Wire.beginTransmission(IO_ADDR_Presets);
       Wire.write(~data);
       Wire.endTransmission();
+      Wire.beginTransmission(IO_ADDR_Loops2);
+      Wire.write(~data);
+      Wire.endTransmission();
       Wire.beginTransmission(IO_ADDR_Loops);
       Wire.write(~data);
       Wire.endTransmission();
@@ -323,6 +350,10 @@ void initLEDs()
   Wire.beginTransmission(IO_ADDR_Presets);
   Wire.write(~0);
   Wire.endTransmission();
+  Wire.beginTransmission(IO_ADDR_Loops2);
+  Wire.write(~0);
+  Wire.endTransmission();
+  
   Wire.beginTransmission(IO_ADDR_Loops);
   Wire.write(~0);
   Wire.endTransmission();
@@ -358,10 +389,25 @@ void setLCDChannel()
     int intAdd = intVal<<(i);
     intLoopLEDs = intLoopLEDs + intAdd;
   }
+    for(i=0; i<3; i++)
+  {
+    intPos = intPos+1;
+    //if (debug) {Serial.print("Pos ");Serial.println(intPos);} 
+    intVal = digitalRead(relayAmpPin[i]);
+    int intAdd = intVal<<(numberOfPedal+i);
+    intLoopLEDs = intLoopLEDs + intAdd;
+  }
   // if (debug) {Serial.print("Write value to lcd "); Serial.println(intLoopLEDs);}
   // Write value to loop I2C extension board
+  
+  byte LoByte = (intLoopLEDs & 0x00FF);
+  byte HiByte = (((intLoopLEDs) >>8) & 0x00FF);
+  
   Wire.beginTransmission(IO_ADDR_Loops);
-  Wire.write(~intLoopLEDs);
+  Wire.write(~LoByte);
+  Wire.endTransmission();
+  Wire.beginTransmission(IO_ADDR_Loops2);
+  Wire.write(~HiByte);
   Wire.endTransmission();
 
 //  setLCDAmpSettings();
@@ -414,6 +460,7 @@ void memory(int addr, int led)
 {
   // Memory layout for each preset is the same and as follows:
   // 0 is loop settings 0-256 0x00000000 to 0x11111111 each bit represents a guitar pedal loop
+  // 1 is the other 4 loop settings 0x00000000 to 0x00001111 + the amp relay status (3 bits)
   // For the midi devices only the program change code is stored. In the current memory model we have space for 8 midi devices
   // At the moment I only use three
   // 1 midi amp 0-2
@@ -428,13 +475,35 @@ void memory(int addr, int led)
   // Depending on the Arduino used you can add banks till you run out of memory
   
   if (debug) Serial.println("Store setting");
-  EEPROM.write((addr), intLoopLEDs);
+//  EEPROM.write((addr), intLoopLEDs);
+  byte LoByte = (intLoopLEDs & 0x00FF);
+  byte HiByte = (((intLoopLEDs) >>8) & 0x000F);
+  Serial.println("initial HiByte:");
+  Serial.println(HiByte, BIN);
+  for (i=0; i<3 ; i++){
+      HiByte = (((intAmpValues[i]) << (4+i)) + HiByte);
+    }
+  Serial.println("Storing LoByte:");
+  Serial.println(LoByte, BIN);
 
+  Serial.println("Storing HiByte:");
+  Serial.println(HiByte, BIN);
+
+  
+    // store amp status
+  //EEPROM.write((addr) + AMPPOS, intAmpValues[1]);
+  //EEPROM.write((addr) + AMPPOS + 1, intAmpValues[2]);
+  //EEPROM.write((addr) + AMPPOS + 2, intAmpValues[3]);
+
+  
+  EEPROM.write((addr), LoByte);
+  EEPROM.write((addr + 1), HiByte);
+  
   // Store Midi settings, get the values from the midi values array for each of the devices
-  EEPROM.write((addr) + 1 + MIDIAMP, intMidiValues[MIDIAMP]);
-  EEPROM.write((addr) + 1 + MIDIFB, intMidiValues[MIDIFB]);
-  EEPROM.write((addr) + 1 + MIDIBS, intMidiValues[MIDIBS]);
-  EEPROM.write((addr) + 1 + MIDIMB, intMidiValues[MIDIMB]);
+  EEPROM.write((addr) + 2 + MIDIAMP, intMidiValues[MIDIAMP]);
+  EEPROM.write((addr) + 2 + MIDIFB, intMidiValues[MIDIFB]);
+  EEPROM.write((addr) + 2 + MIDIBS, intMidiValues[MIDIBS]);
+  EEPROM.write((addr) + 2 + MIDIMB, intMidiValues[MIDIMB]);
   // Reserve room for additional midi devices
   
   // Store switch order value
@@ -443,6 +512,9 @@ void memory(int addr, int led)
   // store amp settings, in the last version of the hardware this is not incorporated
 //  EEPROM.write((addr) + 8, ampReverbValue);
 //  EEPROM.write((addr) + 9, ampGainValue);
+
+
+
   
   // Update LCD to show status of save action
   lcd.setCursor(0,2);
@@ -479,6 +551,10 @@ void checkSaveState(int led, char key)
     {
       intPresetLEDs  = intPresetLEDs  + !digitalRead(relayPin[i])* 1<<(i+1); 
     }
+    for(i=0; i<3; i++)
+    {
+      intPresetLEDs  = intPresetLEDs  + !digitalRead(relayAmpPin[i])* 1<<(numberOfPedal+i+1); 
+    }
     Wire.beginTransmission(IO_ADDR_Presets);
     Wire.write(~intPresetLEDs);
     Wire.endTransmission();
@@ -491,8 +567,15 @@ void checkSaveState(int led, char key)
 void writeOut(int relay) 
 {
   // Toggle single loop value
-  int intChannelVal = LOW;
+  //int intChannelVal = LOW;
   digitalWrite(relayPin[relay], !digitalRead(relayPin[relay]));
+}
+
+void writeAmp(int relay)
+{
+  //Toggle amp setting
+  //int intAmpVal = LOW;
+  digitalWrite(relayAmpPin[relay], !digitalRead(relayAmpPin[relay]));
 }
 
 void mute() 
@@ -516,7 +599,7 @@ void mute()
     }
     muteMode = 1;
     lcd.setCursor(0,1);
-    lcd.print("Mute mode           ");
+    lcd.print("     Mute mode           ");
   }
   else
   {
@@ -538,7 +621,7 @@ void mute()
     if (deviceMode==PRESETMODE) // Preset mode
     {
       lcd.setCursor(0,1);
-      lcd.print("Preset mode         ");
+      lcd.print("    Preset mode         ");
       lcd.setCursor(0,2);
       lcd.print("                   ");
       lcd.setCursor(0,2);
@@ -547,17 +630,22 @@ void mute()
     else // looper mode
     {
       lcd.setCursor(0,1);
-      lcd.print("Program mode        ");
+      lcd.print("    Program mode        ");
     }
     muteMode = 0;
     setLCDChannel();
     // Write value to presets IO
     Wire.beginTransmission(IO_ADDR_Presets);
-    Wire.write(~intPresetLEDs);
+    Wire.write(~intPresetLEDs);  
     Wire.endTransmission();
     // Write value to presets IO
+    byte LoByte = (intLoopLEDs & 0x00FF);
+    byte HiByte = (((intLoopLEDs) >>8) & 0x00FF);
+  
     Wire.beginTransmission(IO_ADDR_Loops);
-    Wire.write(~intLoopLEDs);
+    Wire.write(~LoByte);
+    Wire.beginTransmission(IO_ADDR_Loops2);
+    Wire.write(~HiByte);
     Wire.endTransmission();
   }
 }
@@ -575,7 +663,7 @@ void readPreset(int addr, int pcNum, int led)
   // Get switch order value first
   intCurSwitchOrderValue = EEPROM.read(addr+9);
   // Read value as int from memory, value can be between 0-255
-  int intMemory = EEPROM.read(addr);
+  int intMemory = ((EEPROM.read(addr)) & 0xFF) + (((EEPROM.read(addr+1)) << 8) & 0xFF00);
   
   // Depending on this value the order of switching the loops and midi devices is reversed
   if (intCurSwitchOrderValue==0)
@@ -590,23 +678,8 @@ void readPreset(int addr, int pcNum, int led)
     switchLoops(intMemory);
   }
   unsigned long currentMillis = 0;
-  // Write midi values to lcd
-  if (debug) Serial.println("write midi");
-  // Write midi settings to LCD
   lcd.setCursor(0,3);
   lcd.print("                    ");
-  lcd.setCursor(0,3);
-  lcd.print(strMidiDevicesShort[MIDIAMP]);
-  lcd.print(intMidiValues[MIDIAMP]);
-  lcd.setCursor(5,3);
-  lcd.print(strMidiDevicesShort[MIDIFB]);
-  lcd.print(intMidiValues[MIDIFB]);
-  lcd.setCursor(9,3);
-  lcd.print(strMidiDevicesShort[MIDIBS]);
-  lcd.print(intMidiValues[MIDIBS]);
-  lcd.setCursor(15,3);
-  lcd.print(strMidiDevicesShort[MIDIMB]);
-  lcd.print(intMidiValues[MIDIMB]);
 
   // Amp switching is no longer supported
 //  intRelayVal = EEPROM.read((addr)+8); // Get Reverb value
@@ -656,6 +729,16 @@ void switchLoops(int memValue)
       digitalWrite(relayPin[i], LOW);
     }
   }
+  for(i=0; i<3; i++)
+    {
+    if ((memValue & 1<<(numberOfPedal+i))!=LOW){
+      digitalWrite(relayAmpPin[i], HIGH);
+      intAmpValues[i]=HIGH;
+    } else {
+      digitalWrite(relayAmpPin[i], LOW);
+      intAmpValues[i]=LOW;
+    }
+  }
 }
 
 void writeMidi(int addr) 
@@ -663,10 +746,10 @@ void writeMidi(int addr)
 {
   if (debug) Serial.println("read midi");
   // Read midi values
-  intMidiValues[MIDIAMP] = EEPROM.read((addr)+1+MIDIAMP);
-  intMidiValues[MIDIFB] = EEPROM.read((addr)+1+MIDIFB);
-  intMidiValues[MIDIBS] = EEPROM.read((addr)+1+MIDIBS);
-  intMidiValues[MIDIMB] = EEPROM.read((addr)+1+MIDIMB);
+  intMidiValues[MIDIAMP] = EEPROM.read((addr)+2+MIDIAMP);
+  intMidiValues[MIDIFB] = EEPROM.read((addr)+2+MIDIFB);
+  intMidiValues[MIDIBS] = EEPROM.read((addr)+2+MIDIBS);
+  intMidiValues[MIDIMB] = EEPROM.read((addr)+2+MIDIMB);
   // Write Midi signals (0xC0 is the midi base program change address, add the device channel and write the device preset value)
   midiProg( 0xC0 | intMidiDeviceChannels[MIDIAMP], intMidiValues[MIDIAMP]);
   midiProg( 0xC0 | intMidiDeviceChannels[MIDIFB], intMidiValues[MIDIFB]);
@@ -765,7 +848,7 @@ void handlePresetKeyEvent(int channel)
     deviceMode=PRESETMODE;
     readPreset(getAddress(channel), channel+1, channel);
     lcd.setCursor(0,1);
-    lcd.print("Preset mode         ");
+    lcd.print("    Preset mode     ");
   }
   if (deviceMode==MIDIMODE) // Midi mode, in this mode only button/channel 6 and 7 are handled for up and down of the current midi device value
   {
@@ -802,6 +885,46 @@ void handlePresetKeyEvent(int channel)
 //      if (debug) Serial.println(intCurMidi);
 //      if (debug) Serial.println(intMidiDeviceChannels[intCurMidi]);
 //      if (debug) Serial.println(intMidiValues[intCurMidi]);
+    }
+  }
+    if (deviceMode==AMPMODE) // Amp mode, in this mode only button/channel 6 and 7 are handled for up and down of the current amp value
+  {
+
+    // set new value
+    if (channel==6) // up
+    {
+      // Handle up event
+      intCurAmpValue++;
+      if (intCurAmpValue > 1)
+      {
+        intCurAmpValue=0;
+      }
+    }
+    if (channel==7) // down
+    {
+      // Handle up event
+      intCurAmpValue--;
+      if (intCurAmpValue < 0 )
+      {
+        intCurAmpValue=1;
+      }
+    }
+    // Update LCD to show new value and activate relay
+    if (channel==6 || channel==7)
+    {
+      intAmpValues[intCurAmp] = intCurAmpValue;
+      lcd.setCursor(17,2); 
+      lcd.print("   ");
+      lcd.setCursor(17,2); // print amp status
+      lcd.print(strAmpValue[intCurAmpValue]);
+      // Send midi signal TODO
+      // Mateu pending: Set relay status
+    if (intCurAmpValue==1){
+      digitalWrite(relayAmpPin[intCurAmp], HIGH);
+    } else {
+      digitalWrite(relayAmpPin[intCurAmp], LOW);
+    }
+      
     }
   }
   if (deviceMode==ORDERMODE) // Order mode, in this mode you can control the switch order, Loops versus midi devices. Only 6 and 7 are handled for reversing the order
@@ -841,7 +964,7 @@ void handlePresetKeyEvent(int channel)
     }
   }
 
-  if (muteMode!=0) // When a preset is pressed in mute mode, disable mute and active preset
+  if (muteMode!=0 && deviceMode!=AMPMODE) // When a preset is pressed in mute mode, disable mute and active preset
   {
     // TODO - Disable mute mode
     digitalWrite(muteRelay,HIGH);
@@ -849,7 +972,7 @@ void handlePresetKeyEvent(int channel)
     // digitalWrite(tuneRelay,HIGH);
     muteMode=0;
     lcd.setCursor(0,1);
-    lcd.print("Preset mode         ");
+    lcd.print("    Preset mode         ");
     
   }
   if (deviceMode==STOREMODE) // Store preset mode, store preset in the activated channel (channel variable)
@@ -899,53 +1022,69 @@ void changeDeviceMode(int mode)
 // when mode is 2 we either go to store preset mode or we disable store preset mode
   if (debug) Serial.println("changeDeviceMode");
   if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=PROGRAMMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}  //modified to remove MIDI
+  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=AMPMODE;}
   else if (mode==PROGRAMMODE && deviceMode==STOREMODE) {deviceMode=PROGRAMMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==MIDIMODE) {deviceMode=ORDERMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==ORDERMODE) {deviceMode=PRESETMODE;}
+  else if (mode==PROGRAMMODE && deviceMode==AMPMODE) {deviceMode=PRESETMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==MIDIMODE) {deviceMode=ORDERMODE;}
+  //else if (mode==PROGRAMMODE && deviceMode==ORDERMODE) {deviceMode=PRESETMODE;}
   else if (mode==STOREMODE && deviceMode==PRESETMODE) {deviceMode=STOREMODE;}
   else if (mode==STOREMODE && deviceMode==PROGRAMMODE) {deviceMode=STOREMODE;}
-  else if (mode==STOREMODE && deviceMode==MIDIMODE) {deviceMode=STOREMODE;}
-  else if (mode==STOREMODE && deviceMode==ORDERMODE) {deviceMode=STOREMODE;}
+  //else if (mode==STOREMODE && deviceMode==MIDIMODE) {deviceMode=STOREMODE;}
+  else if (mode==STOREMODE && deviceMode==AMPMODE) {deviceMode=STOREMODE;}
+  //else if (mode==STOREMODE && deviceMode==ORDERMODE) {deviceMode=STOREMODE;}
   else if (mode==STOREMODE && deviceMode==STOREMODE) {deviceMode=PRESETMODE;}
   if  (debug) Serial.println("New deviceMode");
   if  (debug) Serial.println(deviceMode);
   if  (debug) Serial.println(deviceMode==PRESETMODE);
   if (deviceMode==PROGRAMMODE) // set looper mode
   {
-    //Write presets 
     lcd.setCursor(0,1);
-    lcd.print("Program mode        ");
+    lcd.print("    Program mode    ");
     setLCDChannel();
   }
   if (deviceMode==MIDIMODE) // set midi mode
   {
     //Write presets 
     lcd.setCursor(0,1);
-    lcd.print(" Midi mode      ");
+    lcd.print("     Midi mode ");
     //lcd.print(strVersion);
 
     lcd.setCursor(0,2);
-    lcd.print("Midi 2 select source ");
+    lcd.print("  Midi 2 select ");
     lcd.setCursor(0,3);
-    lcd.print("                  ");
+    lcd.print("      ");
+  }
+    if (deviceMode==AMPMODE) // set AMP mode
+  {
+    
+    lcd.setCursor(0,1);
+    lcd.print("     Amp Select     ");
+    //lcd.print(strVersion);
+
+    lcd.setCursor(0,2);
+    lcd.print("                    ");
+    lcd.setCursor(0,3);
+    lcd.print("                    ");
+    handleAmpBankEvent(1);
   }
   if (deviceMode==ORDERMODE) // set order mode
   {
     //Write presets 
     lcd.setCursor(0,1);
-    lcd.print("Set switch order     ");
+    lcd.print("  Set switch order");
     lcd.setCursor(0,2);
     if (intCurSwitchOrderValue==0)
     {
-      lcd.print("Loops -> Midi       ");
+      lcd.print("Loops -> Midi ");
     }
     if (intCurSwitchOrderValue==1)
     {
       lcd.print("Midi -> Loops       ");
     }
     lcd.setCursor(0,3);
-    lcd.print("  _up(7)    (8)down_");
+    lcd.print("     ");
   }
   if (deviceMode==PRESETMODE) // return to preset mode
   {
@@ -954,13 +1093,13 @@ void changeDeviceMode(int mode)
     currentPreset=-1;
     readPreset(getAddress(preset), 1, preset);
     lcd.setCursor(0,1);
-    lcd.print("Preset mode         ");
+    lcd.print("    Preset mode         ");
   }
   if (deviceMode==STOREMODE)
   {
     // lcd.clear();
     lcd.setCursor(0,1);
-    lcd.print("Store mode           ");
+    lcd.print("     Store mode           ");
     lcd.setCursor(0,2);
     lcd.print("Select preset 2store");
     // Show all Preset LED's
@@ -980,21 +1119,46 @@ void showLCDBankMode()
     lcd.setCursor(19,2);
     if (currentBank==0)
     {
-      lcd.print("A");
+      lcd.print("");
     }
     if (currentBank==100)
     {
-      lcd.print("B");
+      lcd.print("");
     }
     if (currentBank==200)
     {
-      lcd.print("C");
+      lcd.print("");
     }
 }
 
 void handleAmpBankEvent(int intButton)
 {
   // Handle amp setting or bank switch event, input either 1 (reverb or down) or 2 (gain or up)
+      if (deviceMode==BANKMODE ) // Bank  mode => bank up or down
+  {
+    String strBank = "A";
+    // check currentBank
+    lcd.setCursor(0,1);
+    int tempBank=newBank;
+    if (intButton==1) // UP
+    {
+      if (tempBank==0) { newBank = 100; strBank="B"; }
+      if (tempBank==100) { newBank = 200; strBank="C"; }
+      if (tempBank==200) { newBank = 0; strBank="A"; }
+    }
+    // check currentBank
+    if (intButton==2) // Down
+    {
+      if (tempBank==0) { newBank = 200; strBank="C";}
+      if (tempBank==100) { newBank = 0; strBank="A";}
+      if (tempBank==200) { newBank = 100; strBank="B";}
+    }
+    showLCDBankMode();
+    // Update LCD
+    lcd.setCursor(0,1);
+    String strText = "Select bank " + strBank + " preset";
+    lcd.print(strText);
+  }
   if (deviceMode==PRESETMODE) // Preset mode => bank up or down
   {
     String strBank = "A";
@@ -1027,7 +1191,7 @@ void handleAmpBankEvent(int intButton)
     deviceMode=BANKMODE;
   }
   if (deviceMode==PROGRAMMODE) // In program mode switch amp reverb setting (no longer used)
-  {
+  {/*
     unsigned long currentMillis = millis();
     if (intButton==1)
     {
@@ -1042,7 +1206,7 @@ void handleAmpBankEvent(int intButton)
       previousGainMillis = currentMillis;
     }
     // Update LCD
-    setLCDAmpSettings();
+    setLCDAmpSettings();*/
   }
   if (deviceMode==MIDIMODE) // Show midi mode settings in LCD display cycle through available midi devices and show their settings
   {
@@ -1061,6 +1225,51 @@ void handleAmpBankEvent(int intButton)
       lcd.print("   ");
       lcd.setCursor(17,2); // print midi channel to lcd
       lcd.print(intCurMidiValue);
+      lcd.setCursor(0,3);
+      lcd.print("  _up(7)    (8)down_");
+    }
+  }
+    if (deviceMode==AMPMODE) // Show amp settings in LCD display cycle through available amps and show their settings
+  {
+    if (intButton==1)
+    {
+      String strAmp = "                    ";
+      intCurAmp = intCurAmp + 1;
+      if (intCurAmp > 2) 
+      {
+        intCurAmp = 0;
+      } 
+      intCurAmpValue = intAmpValues[intCurAmp];
+      Serial.println("ampvalue2:");
+      
+      Serial.println(intAmpValues[0]);
+      Serial.println(intAmpValues[1]);
+      Serial.println(intAmpValues[2]);
+      
+      lcd.setCursor(0,2); // print midi channel to lcd
+      lcd.print(strAmpName[intCurAmp]);
+      lcd.setCursor(17,2); 
+      lcd.print("   ");
+      lcd.setCursor(17,2); // print midi channel to lcd
+      lcd.print(strAmpValue[intCurAmpValue]);
+      lcd.setCursor(0,3);
+      lcd.print("  _up(7)    (8)down_");
+    }
+    if (intButton==2)
+    {
+      String strAmp = "                    ";
+      intCurAmp = intCurAmp -1;
+      if (intCurAmp < 0) 
+      {
+        intCurAmp = 2;
+      } 
+      intCurAmpValue = intAmpValues[intCurAmp];
+      lcd.setCursor(0,2); // print midi channel to lcd
+      lcd.print(strAmpName[intCurAmp]);
+      lcd.setCursor(17,2); 
+      lcd.print("   ");
+      lcd.setCursor(17,2); // print midi channel to lcd
+      lcd.print(strAmpValue[intCurAmpValue]);
       lcd.setCursor(0,3);
       lcd.print("  _up(7)    (8)down_");
     }
@@ -1113,7 +1322,7 @@ void keypadEvent(KeypadEvent key){
            case 'h':
             handlePresetKeyEvent(7);
             break;
-           case 'm': // 'm' to 't' represent a loop key pressed
+           case 'm': // 'm' to 'X' represent a loop key pressed
             handleLoopKeyEvent(0); 
             break;
            case 'n':
@@ -1137,6 +1346,20 @@ void keypadEvent(KeypadEvent key){
            case 't':
             handleLoopKeyEvent(7); 
             break;
+            case 'u':
+            handleLoopKeyEvent(8); 
+            break;
+            case 'v':
+            handleLoopKeyEvent(9); 
+            break;
+            case 'w':
+            handleLoopKeyEvent(10); 
+            break;
+            case 'x':
+            handleLoopKeyEvent(11); 
+            break;
+           
+           
            // TODO - Insert handler for moving through the midi settings
            case 'k': // depending on mode either amp Reverb switch or bank down, the midi handling in program mode is also handled
             handleAmpBankEvent(1);
@@ -1194,7 +1417,7 @@ void keypadEvent(KeypadEvent key){
             Wire.write(~intLoopLEDs);
             Wire.endTransmission();
             lcd.setCursor(0,1);
-            lcd.print("TILT TILT TILT TILT ");
+            lcd.print("  led blink test :) ");
           }
           break;
       }
@@ -1246,10 +1469,17 @@ void loop()
     Wire.write(~intPresetLEDs);
     Wire.endTransmission();
     intLoopLEDs = ~intLoopLEDs;
+    byte LoByte = (intLoopLEDs & 0x00FF);
+    byte HiByte = (((intLoopLEDs) >>8) & 0x00FF);
+  
     // Write value to presets IO
     Wire.beginTransmission(IO_ADDR_Loops);
-    Wire.write(~intLoopLEDs);
+    Wire.write(~LoByte);
     Wire.endTransmission();
+    Wire.beginTransmission(IO_ADDR_Loops2);
+    Wire.write(~HiByte);
+    Wire.endTransmission();
+  
   }
 
   if (previousReverbMillis!=0 and currentMillis - previousReverbMillis >= 50 )
