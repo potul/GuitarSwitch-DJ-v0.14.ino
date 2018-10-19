@@ -627,6 +627,12 @@ void mute()
       lcd.setCursor(0,2);
       lcd.print(presetText());
     }
+    else if (deviceMode==AMPMODE)
+    {
+      lcd.setCursor(0,1);
+      lcd.print("     Amp Select        ");
+      }
+ 
     else // looper mode
     {
       lcd.setCursor(0,1);
@@ -1021,12 +1027,12 @@ void changeDeviceMode(int mode)
 // When mode is 1 we switch between looper and preset, 
 // when mode is 2 we either go to store preset mode or we disable store preset mode
   if (debug) Serial.println("changeDeviceMode");
-  if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=PROGRAMMODE;}
+  if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=AMPMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}  //modified to remove MIDI
-  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=AMPMODE;}
+  else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}
   else if (mode==PROGRAMMODE && deviceMode==STOREMODE) {deviceMode=PROGRAMMODE;}
-  else if (mode==PROGRAMMODE && deviceMode==AMPMODE) {deviceMode=PRESETMODE;}
+  else if (mode==PROGRAMMODE && deviceMode==AMPMODE) {deviceMode=PROGRAMMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==MIDIMODE) {deviceMode=ORDERMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==ORDERMODE) {deviceMode=PRESETMODE;}
   else if (mode==STOREMODE && deviceMode==PRESETMODE) {deviceMode=STOREMODE;}
@@ -1042,6 +1048,10 @@ void changeDeviceMode(int mode)
   {
     lcd.setCursor(0,1);
     lcd.print("    Program mode    ");
+    lcd.setCursor(0,2);
+    lcd.print("                    ");
+    lcd.setCursor(0,3);
+    lcd.print("                    ");
     setLCDChannel();
   }
   if (deviceMode==MIDIMODE) // set midi mode
@@ -1094,6 +1104,7 @@ void changeDeviceMode(int mode)
     readPreset(getAddress(preset), 1, preset);
     lcd.setCursor(0,1);
     lcd.print("    Preset mode         ");
+
   }
   if (deviceMode==STOREMODE)
   {
