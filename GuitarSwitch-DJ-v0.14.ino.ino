@@ -32,6 +32,7 @@
  * Version 0.1 Initial version adding 4 loops more
  * Version 0.2 Some fixes. Removed MIDI functionality
  * Version 0.3 Added Amp selection
+ * Version 0.4 Removed Amp Selection menu. Add 3 relays to be used for Amp selection.
  * 
  * Functions and subroutines
  * setup()
@@ -74,17 +75,18 @@ LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // When simulati
 #define IO_ADDR_Loops 0x39
 #define IO_ADDR_Loops2 0x3A
 
-const String strVersion="0.13";
+const String strVersion="0.14 v0.4";
 
 /* LiquidCrystal_I2C  lcd(0x27,16,2); 
  * set the LCD address to 0x27 for a 16 chars and 2 line display. 
 any other display can be used,just change parameters. */
 // Define matrix rows and cols
-const byte rows = 2; 
+const byte rows = 3; 
 const byte cols = 12; /*change it the same value as numberOfPedal variable */
 char keys[rows][cols] = {
 {'a','b','c','d','e','f','g','h','i','j','k','l'}, // first row contains presets followed by functions
-{'m','n','o','p','q','r','s','t','u','v','w','x'}  // second row contains loops u v w x are not used
+{'m','n','o','p','q','r','s','t','u','v','w','x'},  // second row contains loops u v w x are used
+{'A','B','C','D','E','F','G','H','I','J','K','L'}  // A-C amp. Rest not used
 // Mapping of matrix values
 // a - preset/channel 1
 // b - preset/channel 2
@@ -110,6 +112,11 @@ char keys[rows][cols] = {
 // v - loop 10
 // w - loop 11
 // x - loop 12
+// A - Amp1
+// B - Amp2
+// C - Amp3
+
+
 
 };
 
@@ -149,11 +156,11 @@ int intAmpValues[3]= {0,0,0};
 int intCurSwitchOrderValue = 0; // 0 is loop then midi, 1 is midi then loop
 
 // Arduino I/O pins used for the button marix
-byte rowPins[rows] = {22,23}; // 22 preset+controls, 23 loop
+byte rowPins[rows] = {22,23,43}; // 22 preset+controls, 23 loop, 43 Amp buttons
 byte colPins[cols] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};  //1,2,3,4,5,6,7,8,mode,mute,up/reveb,down/channel  Pin 9 was 36 before.
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, rows, cols);
 // I/O ports used for the loop relays
-int relayPin[12] = {32,31,30,29,28,27,26,25,35,36,37,38};
+int relayPin[15] = {32,31,30,29,28,27,26,25,35,36,37,38,40,41,42};
 int relayAmpPin[3] = {40,41,42};
 char* relayName[12] = {"NEO Lesley", "EQ", "Black Star", "RC Booster", "Corona", "Flashback", "FX 7" , "FX 8", "FX 9", "FX 10", "FX 11" , "FX12"}; // names of the loop pedals, no longer used in LCD
 // Names of the presets, presented in the LCD when activated
@@ -181,7 +188,7 @@ int ampReverbValue = HIGH;
 int ampGainValue = LOW;
 int i;
 
-int numberOfPedal = 12; /*adapt this number to your needs = number of loop pedals */
+int numberOfPedal = 15; /*adapt this number to your needs = number of loop pedals */
 int saveState = 0; // 0 - no save active, 1 - waiting for save, 2 - processed save
 int deviceMode = PRESETMODE; // 0 = preset mode, 1 = looper mode, 2 = store preset mode, 3 = change bank mode
 int holdProcessed=0; // used for detecting hold state of mode switch (for switching to store mode)
@@ -389,7 +396,7 @@ void setLCDChannel()
     int intAdd = intVal<<(i);
     intLoopLEDs = intLoopLEDs + intAdd;
   }
-    for(i=0; i<3; i++)
+/*    for(i=0; i<3; i++)
   {
     intPos = intPos+1;
     //if (debug) {Serial.print("Pos ");Serial.println(intPos);} 
@@ -397,6 +404,7 @@ void setLCDChannel()
     int intAdd = intVal<<(numberOfPedal+i);
     intLoopLEDs = intLoopLEDs + intAdd;
   }
+  */
   // if (debug) {Serial.print("Write value to lcd "); Serial.println(intLoopLEDs);}
   // Write value to loop I2C extension board
   
@@ -477,12 +485,12 @@ void memory(int addr, int led)
   if (debug) Serial.println("Store setting");
 //  EEPROM.write((addr), intLoopLEDs);
   byte LoByte = (intLoopLEDs & 0x00FF);
-  byte HiByte = (((intLoopLEDs) >>8) & 0x000F);
+  byte HiByte = (((intLoopLEDs) >>8) & 0x00FF);
   Serial.println("initial HiByte:");
   Serial.println(HiByte, BIN);
-  for (i=0; i<3 ; i++){
-      HiByte = (((intAmpValues[i]) << (4+i)) + HiByte);
-    }
+  //for (i=0; i<3 ; i++){
+  //    HiByte = (((intAmpValues[i]) << (4+i)) + HiByte);
+  //  }
   Serial.println("Storing LoByte:");
   Serial.println(LoByte, BIN);
 
@@ -735,7 +743,7 @@ void switchLoops(int memValue)
       digitalWrite(relayPin[i], LOW);
     }
   }
-  for(i=0; i<3; i++)
+ /* for(i=0; i<3; i++)
     {
     if ((memValue & 1<<(numberOfPedal+i))!=LOW){
       digitalWrite(relayAmpPin[i], HIGH);
@@ -744,7 +752,7 @@ void switchLoops(int memValue)
       digitalWrite(relayAmpPin[i], LOW);
       intAmpValues[i]=LOW;
     }
-  }
+  }*/
 }
 
 void writeMidi(int addr) 
@@ -1027,7 +1035,8 @@ void changeDeviceMode(int mode)
 // When mode is 1 we switch between looper and preset, 
 // when mode is 2 we either go to store preset mode or we disable store preset mode
   if (debug) Serial.println("changeDeviceMode");
-  if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=AMPMODE;}
+  //if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=AMPMODE;}
+  if (mode==PROGRAMMODE && deviceMode==PRESETMODE) {deviceMode=PROGRAMMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=MIDIMODE;}
   //else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}  //modified to remove MIDI
   else if (mode==PROGRAMMODE && deviceMode==PROGRAMMODE) {deviceMode=PRESETMODE;}
@@ -1368,6 +1377,15 @@ void keypadEvent(KeypadEvent key){
             break;
             case 'x':
             handleLoopKeyEvent(11); 
+            break;
+            case 'A':
+            handleLoopKeyEvent(12); 
+            break;
+            case 'B':
+            handleLoopKeyEvent(13); 
+            break;
+            case 'C':
+            handleLoopKeyEvent(14); 
             break;
            
            
